@@ -9,6 +9,9 @@ import sys
 from urllib.parse import urlencode, parse_qsl
 import xbmcgui
 import xbmcplugin
+import requests
+import re
+from bs4 import BeautifulSoup
 
 # Get the plugin url in plugin:// notation.
 _URL = sys.argv[0]
@@ -88,22 +91,22 @@ def get_categories():
     return VIDEOS.keys()
 
 
-def get_videos(category):
-    """
-    Get the list of videofiles/streams.
-
-    Here you can insert some parsing code that retrieves
-    the list of video streams in the given category from some site or API.
-
-    .. note:: Consider using `generators functions <https://wiki.python.org/moin/Generators>`_
-        instead of returning lists.
-
-    :param category: Category name
-    :type category: str
-    :return: the list of videos in the category
-    :rtype: list
-    """
-    return VIDEOS[category]
+# def get_videos(category):
+#     """
+#     Get the list of videofiles/streams.
+#
+#     Here you can insert some parsing code that retrieves
+#     the list of video streams in the given category from some site or API.
+#
+#     .. note:: Consider using `generators functions <https://wiki.python.org/moin/Generators>`_
+#         instead of returning lists.
+#
+#     :param category: Category name
+#     :type category: str
+#     :return: the list of videos in the category
+#     :rtype: list
+#     """
+#     return VIDEOS[category]
 
 
 def list_categories():
@@ -150,6 +153,33 @@ def list_categories():
     xbmcplugin.endOfDirectory(_HANDLE)
 
 
+def get_videos():
+    videos = []
+    url = 'http://strims.world'
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content)
+    events = soup.find_all('td', class_='wydarzenie')
+    for event in events:
+        event_url = url + event.find('a').get('href') + '?source=1'
+        print(event.text, event_url)
+
+        response = requests.get(event_url)
+        soup = BeautifulSoup(response.content)
+        iframe = soup.find('iframe')
+        if 'assia' in iframe.get('src'):
+            # print(iframe.get('src'))
+
+            stream = requests.get(iframe.get('src'))
+            video_link = re.findall("http.*m3u8\?md5.*&expires=\d+", stream.text)  # http/https
+            print(video_link)  # m3u8 link
+            if video_link:
+                videos.append({"name": event.text,
+                               "thumb": "http://www.vidsplay.com/wp-content/uploads/2017/04/crab-screenshot.jpg",
+                               "video": video_link,
+                               "genre": "matches"})
+    return videos
+
+
 def list_videos(category):
     """
     Create the list of playable videos in the Kodi interface.
@@ -164,7 +194,7 @@ def list_videos(category):
     # for this type of content.
     xbmcplugin.setContent(_HANDLE, 'videos')
     # Get the list of videos in the category.
-    videos = get_videos(category)
+    videos = get_videos()
     # Iterate through videos.
     for video in videos:
         # Create a list item with a text label and a thumbnail image.
