@@ -9,7 +9,7 @@ import sys
 from urllib.parse import urlencode, parse_qsl
 import xbmcgui
 import xbmcplugin
-import xbmc
+from collections import defaultdict
 import requests
 import re
 from bs4 import BeautifulSoup
@@ -75,6 +75,25 @@ def get_url(**kwargs):
     return '{}?{}'.format(_URL, urlencode(kwargs))
 
 
+def get_events():
+    events_dict = defaultdict(list)
+    url = 'http://strims.world'
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content)
+    events = soup.find_all('td', class_='wydarzenie')
+    for event in events:
+        event_category = event.find('a').get("class")[0]
+        event_url = url + event.find('a').get('href') + '?source=1'
+        print(event.text, event_url)
+        # print(iframe.get('src'))
+        events_dict[event_category].append(
+            {"name": event.text,
+             "thumb": "http://www.vidsplay.com/wp-content/uploads/2017/04/crab-screenshot.jpg",
+             "video": event_url,
+             "genre": event_category})
+    return events_dict
+
+
 def get_categories():
     """
     Get the list of video categories.
@@ -89,7 +108,7 @@ def get_categories():
     :return: The list of video categories
     :rtype: types.GeneratorType
     """
-    return VIDEOS.keys()
+    return get_events().keys()
 
 
 # def get_videos(category):
@@ -116,7 +135,7 @@ def list_categories():
     """
     # Set plugin category. It is displayed in some skins as the name
     # of the current section.
-    xbmcplugin.setPluginCategory(_HANDLE, 'My Video Collection')
+    xbmcplugin.setPluginCategory(_HANDLE, 'Sporty')
     # Set plugin content. It allows Kodi to select appropriate views
     # for this type of content.
     xbmcplugin.setContent(_HANDLE, 'videos')
@@ -129,9 +148,9 @@ def list_categories():
         # Set graphics (thumbnail, fanart, banner, poster, landscape etc.) for the list item.
         # Here we use the same image for all items for simplicity's sake.
         # In a real-life plugin you need to set each image accordingly.
-        list_item.setArt({'thumb': VIDEOS[category][0]['thumb'],
-                          'icon': VIDEOS[category][0]['thumb'],
-                          'fanart': VIDEOS[category][0]['thumb']})
+        # list_item.setArt({'thumb': VIDEOS[category][0]['thumb'],
+        #                   'icon': VIDEOS[category][0]['thumb'],
+        #                   'fanart': VIDEOS[category][0]['thumb']})
         # Set additional info for the list item.
         # Here we use a category name for both properties for for simplicity's sake.
         # setInfo allows to set various information for an item.
@@ -154,21 +173,8 @@ def list_categories():
     xbmcplugin.endOfDirectory(_HANDLE)
 
 
-def get_videos():
-    videos = []
-    url = 'http://strims.world'
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content)
-    events = soup.find_all('td', class_='wydarzenie')
-    for event in events:
-        event_url = url + event.find('a').get('href') + '?source=1'
-        print(event.text, event_url)
-        # print(iframe.get('src'))
-        videos.append({"name": event.text,
-                       "thumb": "http://www.vidsplay.com/wp-content/uploads/2017/04/crab-screenshot.jpg",
-                       "video": event_url,
-                       "genre": "matches"})
-    return videos
+def get_videos(category):
+    return get_events()[category]
 
 
 def list_videos(category):
@@ -185,7 +191,7 @@ def list_videos(category):
     # for this type of content.
     xbmcplugin.setContent(_HANDLE, 'videos')
     # Get the list of videos in the category.
-    videos = get_videos()
+    videos = get_videos(category)
     # Iterate through videos.
     for video in videos:
         # Create a list item with a text label and a thumbnail image.
