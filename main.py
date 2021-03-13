@@ -9,6 +9,7 @@ import sys
 from urllib.parse import urlencode, parse_qsl
 import xbmcgui
 import xbmcplugin
+import xbmc
 import requests
 import re
 from bs4 import BeautifulSoup
@@ -162,21 +163,11 @@ def get_videos():
     for event in events:
         event_url = url + event.find('a').get('href') + '?source=1'
         print(event.text, event_url)
-
-        response = requests.get(event_url)
-        soup = BeautifulSoup(response.content)
-        iframe = soup.find('iframe')
-        if 'assia' in iframe.get('src'):
-            # print(iframe.get('src'))
-
-            stream = requests.get(iframe.get('src'))
-            video_link = re.findall("http.*m3u8\?md5.*&expires=\d+", stream.text)  # http/https
-            print(video_link)  # m3u8 link
-            if video_link:
-                videos.append({"name": event.text,
-                               "thumb": "http://www.vidsplay.com/wp-content/uploads/2017/04/crab-screenshot.jpg",
-                               "video": video_link,
-                               "genre": "matches"})
+        # print(iframe.get('src'))
+        videos.append({"name": event.text,
+                       "thumb": "http://www.vidsplay.com/wp-content/uploads/2017/04/crab-screenshot.jpg",
+                       "video": event_url,
+                       "genre": "matches"})
     return videos
 
 
@@ -232,11 +223,19 @@ def play_video(path):
     :param path: Fully-qualified video URL
     :type path: str
     """
-    # Create a playable item with a path to play.
-    play_item = xbmcgui.ListItem(path=path)
-    # Pass the item to the Kodi player.
-    xbmcplugin.setResolvedUrl(_HANDLE, True, listitem=play_item)
-
+    response = requests.get(path)
+    soup = BeautifulSoup(response.content)
+    iframe = soup.find('iframe')
+    if 'assia' in iframe.get('src'):
+        stream = requests.get(iframe.get('src'))
+        video_link = re.findall("http.*m3u8\?md5.*&expires=\d+", stream.text)  # http/https
+        print(video_link)  # m3u8 link
+        if video_link:
+            # Create a playable item with a path to play.
+            play_item = xbmcgui.ListItem(path=video_link[0])
+            # Pass the item to the Kodi player.
+            xbmcplugin.setResolvedUrl(_HANDLE, True, listitem=play_item)
+            # xbmc.Player().play(path)
 
 def router(paramstring):
     """
