@@ -9,6 +9,7 @@ import sys
 from urllib.parse import urlencode, parse_qsl
 import xbmcgui
 import xbmcplugin
+import xbmc
 from collections import defaultdict
 import requests
 import re
@@ -83,7 +84,7 @@ def get_events():
     events = soup.find_all('td', class_='wydarzenie')
     for event in events:
         event_category = event.find('a').get("class")[0]
-        event_url = url + event.find('a').get('href') + '?source=1'
+        event_url = url + event.find('a').get('href')
         print(event.text, event_url)
         # print(iframe.get('src'))
         events_dict[event_category].append(
@@ -207,10 +208,76 @@ def list_videos(category):
         list_item.setArt({'thumb': video['thumb'], 'icon': video['thumb'], 'fanart': video['thumb']})
         # Set 'IsPlayable' property to 'true'.
         # This is mandatory for playable items!
+        # list_item.setProperty('IsPlayable', 'true')
+        # Create a URL for a plugin recursive call.
+        # Example: plugin://plugin.video.example/?action=play&video=http://www.vidsplay.com/wp-content/uploads/2017/04/crab.mp4
+        url = get_url(action='listing', video=video['video'])
+        # Add the list item to a virtual Kodi folder.
+        # is_folder = False means that this item won't open any sub-list.
+        is_folder = True
+        # Add our item to the Kodi virtual folder listing.
+        xbmcplugin.addDirectoryItem(_HANDLE, url, list_item, is_folder)
+    # Add a sort method for the virtual folder items (alphabetically, ignore articles)
+    xbmcplugin.addSortMethod(_HANDLE, xbmcplugin.SORT_METHOD_LABEL_IGNORE_THE)
+    # Finish creating a virtual folder.
+    xbmcplugin.endOfDirectory(_HANDLE)
+
+
+def get_video_qualities(video):
+    qualities_dict = defaultdict(list)
+    response = requests.get(video)
+    soup = BeautifulSoup(response.content)
+    qualities = soup.find_all('a', class_='btn btn-primary')
+    if qualities:
+        for quality in qualities:
+            qualities_dict[video].append(
+                {"name": quality.text,
+                 "thumb": "http://www.vidsplay.com/wp-content/uploads/2017/04/crab-screenshot.jpg",
+                 "video": video + quality.get('href'),
+                 "genre": 'quality'})
+    else:
+        qualities_dict[video].append(
+            {"name": 'default',
+             "thumb": "http://www.vidsplay.com/wp-content/uploads/2017/04/crab-screenshot.jpg",
+             "video": video,
+             "genre": 'quality'})
+    return qualities_dict
+
+
+def list_video_qualities(video):
+    """
+    Create the list of playable videos in the Kodi interface.
+
+    :param category: Category name
+    :type category: str
+    """
+    # Set plugin category. It is displayed in some skins as the name
+    # of the current section.
+    xbmcplugin.setPluginCategory(_HANDLE, "qualities")
+    # Set plugin content. It allows Kodi to select appropriate views
+    # for this type of content.
+    xbmcplugin.setContent(_HANDLE, 'videos')
+    # Get the list of videos in the category.
+    qualities = get_video_qualities(video)
+    # Iterate through videos.
+    for quality in qualities[video]:
+        # Create a list item with a text label and a thumbnail image.
+        list_item = xbmcgui.ListItem(label=quality['name'])
+        # Set additional info for the list item.
+        # 'mediatype' is needed for skin to display info for this ListItem correctly.
+        list_item.setInfo('video', {'title': quality['name'],
+                                    'genre': 'quality',
+                                    'mediatype': 'video'})
+        # Set graphics (thumbnail, fanart, banner, poster, landscape etc.) for the list item.
+        # Here we use the same image for all items for simplicity's sake.
+        # In a real-life plugin you need to set each image accordingly.
+        # list_item.setArt({'thumb': video['thumb'], 'icon': video['thumb'], 'fanart': video['thumb']})
+        # Set 'IsPlayable' property to 'true'.
+        # This is mandatory for playable items!
         list_item.setProperty('IsPlayable', 'true')
         # Create a URL for a plugin recursive call.
         # Example: plugin://plugin.video.example/?action=play&video=http://www.vidsplay.com/wp-content/uploads/2017/04/crab.mp4
-        url = get_url(action='play', video=video['video'])
+        url = get_url(action='play', video=quality['video'])
         # Add the list item to a virtual Kodi folder.
         # is_folder = False means that this item won't open any sub-list.
         is_folder = False
@@ -232,16 +299,16 @@ def play_video(path):
     response = requests.get(path)
     soup = BeautifulSoup(response.content)
     iframe = soup.find('iframe')
-    if 'assia' in iframe.get('src'):
-        stream = requests.get(iframe.get('src'))
-        video_link = re.findall("http.*m3u8\?md5.*&expires=\d+", stream.text)  # http/https
-        print(video_link)  # m3u8 link
-        if video_link:
-            # Create a playable item with a path to play.
-            play_item = xbmcgui.ListItem(path=video_link[0])
-            # Pass the item to the Kodi player.
-            xbmcplugin.setResolvedUrl(_HANDLE, True, listitem=play_item)
-            # xbmc.Player().play(path)
+    # if 'assia' in iframe.get('src'):
+    stream = requests.get(iframe.get('src'))
+    video_link = re.findall("http.*m3u8\?md5.*&expires=\d+", stream.text)  # http/https
+    print(video_link)  # m3u8 link
+    if video_link:
+        # Create a playable item with a path to play.
+        play_item = xbmcgui.ListItem(path=video_link[0])
+        # Pass the item to the Kodi player.
+        xbmcplugin.setResolvedUrl(_HANDLE, True, listitem=play_item)
+        # xbmc.Player().play(path)
 
 def router(paramstring):
     """
@@ -256,9 +323,12 @@ def router(paramstring):
     params = dict(parse_qsl(paramstring))
     # Check the parameters passed to the plugin
     if params:
-        if params['action'] == 'listing':
+        if params['action'] == 'listing' and params.get('category'):
             # Display the list of videos in a provided category.
             list_videos(params['category'])
+        elif params['action'] == 'listing' and params.get('video'):
+            # Display the list of videos in a provided category.
+            list_video_qualities(params['video'])
         elif params['action'] == 'play':
             # Play a video from a provided URL.
             play_video(params['video'])
